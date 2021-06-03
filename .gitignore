@@ -1,3 +1,6 @@
 data/
 .vscode
 submission.*
+
+
+__pycache__
