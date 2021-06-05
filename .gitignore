@@ -2,5 +2,10 @@ data/
 .vscode
 submission.*
 
+run.sh
+
+.ipynb_checkpoints
+.vector_cache
+
 
 __pycache__
