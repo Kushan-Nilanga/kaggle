@@ -1,3 +1,9 @@
+import torch.optim as optim
+import torch as t
+import torch.nn as nn
+from collections import Counter
+from torchtext.vocab import Vocab
+from torchtext.data import Field
 import pandas as pd
 from string import punctuation
 
@@ -8,18 +14,13 @@ from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 
 # vocab builder imports
-from torchtext.data import Field
-from torchtext.vocab import Vocab
-from collections import Counter
-
-# model imports
-import torch as t
-import torch.nn as nn
+import spacy
+en = spacy.load("en_core_web_sm")
 
 
 class Seq2Vec(nn.Module):
-    def __init__(self, vocab_size, embedding_dim=1, hidden_dim, output_dim, n_layers, bidirectional, dropout):
-        super(self, Seq2Vec).__init__()
+    def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim, n_layers, bidirectional, dropout):
+        super(Seq2Vec, self).__init__()
 
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
 
@@ -39,7 +40,7 @@ class Seq2Vec(nn.Module):
 
         # packing
         packed_embed = nn.utils.rnn.pack_padded_sequence(
-            x_embed, x_len, batch_first=True)
+            x_embed, x_len, batch_first=True, enforce_sorted=False)
 
         # lstm pass
         x_out, (hidden, cell) = self.lstm(packed_embed)
@@ -52,8 +53,6 @@ class Seq2Vec(nn.Module):
 
         x = self.fc(hidden)
         return self.sigmoid(x)
-
-
 
 
 def preprocess(data: pd.DataFrame):
@@ -83,15 +82,18 @@ def preprocess(data: pd.DataFrame):
     # converting to lowercase
     x = data['message to examine'].str.lower()
 
+    x = x.dropna()
+
     # remove punctuations
     x = x.apply(lambda row: row.translate(str.maketrans('', '', punctuation)))
 
-    # tokenise
+    # split
     x = x.apply(lambda row: word_tokenize(row))
 
     # Removal of Stopwords
-    STOPWORDS = set(stopwords.words('english'))
-    x = x.apply(lambda row: [word for word in row if word not in STOPWORDS])
+    # DEPRECATED -> Done via spacy
+    #STOPWORDS = set(stopwords.words('english'))
+    #x = x.apply(lambda row: [word for word in row if word not in STOPWORDS])
 
     # stemming
     stemmer = SnowballStemmer('english')
@@ -101,36 +103,84 @@ def preprocess(data: pd.DataFrame):
     lemmatizer = WordNetLemmatizer()
     x = x.apply(lambda row: [lemmatizer.lemmatize(word) for word in row])
 
-    # dropping 1 or 2 letter words
-    x = x.apply(lambda row: [word for word in row if len(word) > 2])
-
-    # dropping words with more than 10 letters
-    x = x.apply(lambda row: [word for word in row if len(word) < 10])
-
     x = x.apply(lambda row: ' '.join(row))
-
-    x.to_csv("x.csv")
     return x
 
 
-def build_vocab(data: pd.DataFrame) -> Field:
+def build_vocab_(data: pd.DataFrame, size: int) -> Field:
     # init the field for vocab
-    vocab = Field(init_token='<sos>', eos_token='<eos>')
+    vocab = Field(tokenize=en, init_token='<sos>',
+                  eos_token='<eos>', batch_first=True)
 
     # building vocabulary from data
-    vocab.build_vocab(data, vectors="glove.6B.100d")
+    vocab.build_vocab(data, max_size=size,
+                      vectors='glove.6B.200d', unk_init=t.Tensor.zero_)
     return vocab
 
 # embedding data from ints
 
 
-def embed_data(data: pd.DataFrame, vocab: Field):
-    return data.apply(lambda row: vocab.numericalize(row))
+def embed_data(data: pd.DataFrame, vocab: Field, output_shape, padding):
+    x = [vocab.numericalize(row) for row in data]
+    x_ten = t.zeros(output_shape, dtype=t.int32)
+
+    for j in range(x_ten.shape[0]):
+        for i in range(x_ten.shape[1]):
+            if(i < len(x[j])):
+                x_ten[j][i] = x[j][i]
+            else:
+                x_ten[j][i] = padding
+    return x_ten
 
 
 if __name__ == "__main__":
     data = pd.read_csv("./data/sentiment_tweets3.csv")
-    data = preprocess(data)
-    vocab = build_vocab(data)
-    embeddings = embed_data(data, vocab)
-    print(embeddings)
+    x = preprocess(data)
+
+    vocab = build_vocab_(x, 10000)
+
+    # hyperparameters
+    n_epochs = 25
+    learning_r = 0.01
+    vocab_dim = len(vocab.vocab)
+    embed_dim = 250
+    hidden_dim = 256
+    out_dim = 1
+    n_layers = 3
+    bidirectional = True
+    dropout = 0.2
+
+    model = Seq2Vec(vocab_dim, embed_dim, hidden_dim,
+                    out_dim, n_layers, bidirectional, dropout)
+
+    criterion = nn.BCEWithLogitsLoss()
+    optimiser = optim.Adam(model.parameters(), lr=learning_r)
+
+    def accuracy(preds, y):
+        rounded_preds = torch.round(torch.sigmoid(preds))
+        # convert into float for division
+        correct = (rounded_preds == y).float()
+        acc = correct.sum() / len(correct)
+        return acc
+
+    pad_idx = vocab.vocab.stoi[vocab.pad_token]
+
+    x_len = t.tensor([len(row) for row in x], dtype=t.int64)
+    x = embed_data(x, vocab, [len(x_len), embed_dim], pad_idx)
+    y = t.tensor(data['label (depression result)'])
+
+    model.train()
+    # train loops
+    for epoch in range(n_epochs):
+        start_idx = 0
+        end_idx = 0
+        steps = 100
+        while(end_idx < len(x_len)):
+            optimiser.zero_grad()
+            y_hat = model(x[start_idx:end_idx, :], x_len[start_idx:end_idx])
+            loss = criterion(y_hat, y[start_idx:end_idx])
+            print(loss)
+            loss.backward()
+            optimizer.step()
+            start_idx = end_idx
+            end_idx += steps
