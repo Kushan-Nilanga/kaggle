@@ -61,11 +61,8 @@ class Conv(nn.Module):
 
 
 def accuracy(y_hat, y):
-    corr_count = 0.0
-    for i in range(len(y_hat)):
-        if (int(y_hat[i, 0]) == int(y[i, 0])):
-            corr_count += 1.0
-    return corr_count * 100 / len(y_hat)
+    return torch.sum(y_hat)*100/sum(y)
+    
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -74,12 +71,12 @@ if __name__ == '__main__':
     model = Conv().to(DEVICE)
     print(model)
 
-    N_EPOCH = 20
+    N_EPOCH = 0
 
-    test = DigitDataset('test.csv', False)
-    train = DigitDataset('train.csv')
+    test = DigitDataset('test.csv', False, device=DEVICE)
+    train = DigitDataset('train.csv', device=DEVICE)
 
-    loader = DataLoader(train, 5000, shuffle=True)
+    loader = DataLoader(train, 1000, shuffle=True)
 
     criterion = nn.MSELoss()
     optim = optim.Adam(model.parameters(), 0.05)
@@ -102,11 +99,10 @@ if __name__ == '__main__':
             optim.step()
 
             acc = accuracy(pred, y)
-
             aggr_loss.append(loss)
             aggr_accuracy.append(acc)
 
-            if(len(aggr_accuracy) > 100):
+            if(len(aggr_accuracy) > 10):
                 aggr_accuracy.popleft()
                 aggr_loss.popleft()
 
