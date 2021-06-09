@@ -13,19 +13,45 @@ class Conv(nn.Module):
         self.model = nn.Sequential(
 
             # conv 1
-            nn.Conv2d(in_channels=1, out_channels=8, kernel_size=28, stride=1),
-            nn.BatchNorm2d(8),
-
-            # conv 2
-            nn.Conv2d(in_channels=8, out_channels=16,
-                      kernel_size=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.MaxPool2d(kernel_size=2),
-
+            nn.Conv2d(
+                in_channels=1,
+                out_channels=32,
+                kernel_size=2,
+                stride=1,
+                padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(
+                in_channels=32,
+                out_channels=32,
+                kernel_size=3,
+                stride=1,
+                padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(
+                in_channels=32,
+                out_channels=64,
+                kernel_size=3,
+                stride=1,
+                padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                stride=1,
+                padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
 
             # linear layers
             nn.Flatten(),
-            nn.Linear(in_features=16, out_features=16),
+            nn.Linear(in_features=576, out_features=16),
             nn.ReLU(),
             nn.Linear(in_features=16, out_features=1),
         )
@@ -42,8 +68,11 @@ def accuracy(y_hat, y):
     return corr_count * 100 / len(y_hat)
 
 
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 if __name__ == '__main__':
-    model = Conv()
+    model = Conv().to(DEVICE)
+    print(model)
 
     N_EPOCH = 20
 
