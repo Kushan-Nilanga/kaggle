@@ -1,4 +1,9 @@
 train/
+test/
+*.zip
 train_*
 png/
 img
+*.csv
+converted
+png_*
