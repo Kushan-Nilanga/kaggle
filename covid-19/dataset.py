@@ -43,6 +43,3 @@ class ImageDataset(Dataset):
             pass
 
         return (torch.tensor(im_dcm.pixel_array.astype(int), dtype=torch.float32), boxes)
-
-
-dataset = ImageDataset("train_image_level.csv", "train/")
