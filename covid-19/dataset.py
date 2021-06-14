@@ -2,10 +2,8 @@ from torch.utils.data.dataset import Dataset
 import pandas as pd
 import pydicom
 import os
-import numpy
 import json
 import torch
-
 
 class ImageDataset(Dataset):
     def __init__(self, csv_file, dicom_dir):
